@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Silver Isn't Just "Poor Man's Gold" Anymore</title>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <style>
 
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,450;9..144,560;9..144,650&family=Source+Serif+4:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap');
@@ -419,27 +422,88 @@ svg text{ font-family:var(--mono); }
 }
 input[type=range]{
   width:100%;
+  appearance:none;
   -webkit-appearance:none;
-  height:2px;
+  height:6px;
   background:rgba(234,231,224,0.25);
   margin:26px 0 10px;
-  border-radius:2px;
+  border-radius:3px;
+  outline:none;
+  cursor:pointer;
+  touch-action:none;
 }
 input[type=range]::-webkit-slider-thumb{
   -webkit-appearance:none;
-  width:16px;height:16px;
+  appearance:none;
+  width:22px;height:22px;
   border-radius:50%;
   background:var(--copper-bright);
   cursor:pointer;
   border:2px solid var(--graphite);
-  box-shadow:0 0 0 1px rgba(234,231,224,0.4);
+  box-shadow:0 0 0 2px rgba(234,231,224,0.5), 0 2px 6px rgba(0,0,0,0.5);
+  transition:transform 0.15s ease, background 0.15s ease;
+}
+input[type=range]:active::-webkit-slider-thumb{
+  transform:scale(1.25);
+  background:#ffa84a;
 }
 input[type=range]::-moz-range-thumb{
-  width:16px;height:16px;
+  width:22px;height:22px;
   border-radius:50%;
   background:var(--copper-bright);
   cursor:pointer;
   border:2px solid var(--graphite);
+  box-shadow:0 0 0 2px rgba(234,231,224,0.5), 0 2px 6px rgba(0,0,0,0.5);
+}
+input[type=range]::-moz-range-track{
+  height:6px;
+  background:rgba(234,231,224,0.25);
+  border-radius:3px;
+  border:none;
+}
+.chart-bar, .chart-point, .comp-seg {
+  cursor:pointer;
+  transition:opacity 0.15s ease, filter 0.15s ease;
+}
+.chart-bar:hover, .comp-seg:hover {
+  filter:brightness(1.2);
+  opacity:0.9;
+}
+.chart-point:hover {
+  filter:drop-shadow(0 0 6px var(--spark));
+}
+.chart-tooltip{
+  position:fixed;
+  background:var(--graphite);
+  color:var(--silver-white);
+  padding:8px 12px;
+  border-radius:4px;
+  font-family:var(--mono);
+  font-size:12px;
+  line-height:1.4;
+  pointer-events:none;
+  z-index:9999;
+  box-shadow:0 4px 16px rgba(0,0,0,0.45);
+  border:1px solid rgba(234,231,224,0.2);
+  opacity:0;
+  transform:translate(-50%, -100%) translateY(-10px);
+  transition:opacity 0.1s ease;
+  white-space:nowrap;
+}
+.chart-tooltip.visible{
+  opacity:1;
+}
+.chart-tooltip .tt-title{
+  font-weight:600;
+  color:var(--silver-white);
+  margin-bottom:2px;
+}
+.chart-tooltip .tt-val{
+  color:var(--copper-bright);
+}
+.chart-tooltip .tt-sub{
+  color:var(--silver-dim);
+  font-size:11px;
 }
 .ratio-scale{
   display:flex;
@@ -975,349 +1039,475 @@ hr.rule{
 
 <script>
 (function(){
+function initAll(){
+  const paper = '#fbfaf6';
+  const ink = '#1c1c1c';
+  const dim = '#7c8085';
+  const copper = '#c9702e';
+  const copperBright = '#e2903f';
+  const spark = '#6fc7d4';
+  const sparkDim = '#3d6c74';
+  const lineSoft = 'rgba(23,24,26,0.14)';
 
-const paper = '#fbfaf6';
-const ink = '#1c1c1c';
-const dim = '#7c8085';
-const copper = '#c9702e';
-const copperBright = '#e2903f';
-const spark = '#6fc7d4';
-const sparkDim = '#3d6c74';
-const lineSoft = 'rgba(23,24,26,0.14)';
+  function svgEl(tag, attrs){
+    const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    for(const k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  }
 
-function svgEl(tag, attrs){
-  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
-  for(const k in attrs) el.setAttribute(k, attrs[k]);
-  return el;
+  // Tooltip helper
+  let tooltip = document.getElementById('chart-tooltip');
+  if (!tooltip) {
+    tooltip = document.createElement('div');
+    tooltip.id = 'chart-tooltip';
+    tooltip.className = 'chart-tooltip';
+    document.body.appendChild(tooltip);
+  }
+
+  function showTooltip(e, html){
+    tooltip.innerHTML = html;
+    tooltip.classList.add('visible');
+    positionTooltip(e);
+  }
+
+  function positionTooltip(e){
+    let x = e.clientX || (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+    let y = e.clientY || (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+    tooltip.style.left = x + 'px';
+    tooltip.style.top = y + 'px';
+  }
+
+  function hideTooltip(){
+    tooltip.classList.remove('visible');
+  }
+
+  /* ---------- CHART 1: PV demand bar chart ---------- */
+  try {
+    const container = document.getElementById('chart-pv-demand');
+    if (container) {
+      container.innerHTML = '';
+      const data = [
+        {y:'2014', v:60},
+        {y:'2016', v:76},
+        {y:'2018', v:101},
+        {y:'2020', v:105},
+        {y:'2022', v:118},
+        {y:'2023', v:194},
+        {y:'2024', v:232},
+        {y:'2025', v:187},
+        {y:'2026*', v:151},
+      ];
+      const w = 900, h = 320, padL = 46, padR = 16, padT = 14, padB = 36;
+      const maxV = 250;
+      const bw = (w - padL - padR) / data.length;
+      const svg = svgEl('svg', {viewBox:`0 0 ${w} ${h}`, width:'100%', style:'display:block; overflow:visible;'});
+
+      [0,50,100,150,200,250].forEach(function(gv){
+        const y = h - padB - (gv/maxV)*(h-padT-padB);
+        svg.appendChild(svgEl('line', {x1:padL, x2:w-padR, y1:y, y2:y, stroke: lineSoft, 'stroke-width':1}));
+        const t = svgEl('text', {x:padL-10, y:y+4, 'text-anchor':'end', 'font-size':'11', fill:dim});
+        t.textContent = gv;
+        svg.appendChild(t);
+      });
+
+      data.forEach(function(d, i){
+        const x = padL + i*bw + bw*0.22;
+        const barW = bw*0.56;
+        const barH = (d.v/maxV)*(h-padT-padB);
+        const y = h - padB - barH;
+        const isForecast = d.y.indexOf('*') > -1;
+        const rect = svgEl('rect', {
+          x:x, y:y, width:barW, height:barH,
+          fill: isForecast ? '#d99a5c' : copper,
+          opacity: isForecast? 0.75 : 1,
+          class: 'chart-bar'
+        });
+
+        rect.addEventListener('mouseenter', function(e){
+          showTooltip(e, `<div class="tt-title">Year ${d.y}</div><div class="tt-val">${d.v} Moz</div><div class="tt-sub">PV Silver Demand</div>`);
+        });
+        rect.addEventListener('mousemove', positionTooltip);
+        rect.addEventListener('mouseleave', hideTooltip);
+        rect.addEventListener('click', function(e){
+          showTooltip(e, `<div class="tt-title">Year ${d.y}</div><div class="tt-val">${d.v} Moz</div><div class="tt-sub">PV Silver Demand</div>`);
+        });
+
+        svg.appendChild(rect);
+        const val = svgEl('text', {x:x+barW/2, y:y-8, 'text-anchor':'middle', 'font-size':'12', fill:'#3a3b3c', 'font-weight':'600'});
+        val.textContent = d.v;
+        val.style.pointerEvents = 'none';
+        svg.appendChild(val);
+        const lbl = svgEl('text', {x:x+barW/2, y:h-padB+18, 'text-anchor':'middle', 'font-size':'11', fill:dim});
+        lbl.textContent = d.y;
+        svg.appendChild(lbl);
+      });
+
+      container.appendChild(svg);
+    }
+  } catch(e) { console.error('Error in Chart 1:', e); }
+
+  /* ---------- CHART 2: Decoupling index (dual line) ---------- */
+  try {
+    const container = document.getElementById('chart-decouple');
+    if (container) {
+      container.innerHTML = '';
+      const years = ['2014','2016','2018','2020','2022','2024'];
+      const capacity = [100, 175, 270, 400, 620, 1080];
+      const silver = [100, 127, 168, 175, 197, 327];
+
+      const w = 500, h = 300, padL = 40, padR = 16, padT = 20, padB = 32;
+      const maxV = 1150;
+      const svg = svgEl('svg', {viewBox:`0 0 ${w} ${h}`, width:'100%', style:'display:block; overflow:visible;'});
+
+      [0,250,500,750,1000].forEach(function(gv){
+        const y = h - padB - (gv/maxV)*(h-padT-padB);
+        svg.appendChild(svgEl('line', {x1:padL, x2:w-padR, y1:y, y2:y, stroke: lineSoft, 'stroke-width':1}));
+        const t = svgEl('text', {x:padL-8, y:y+4, 'text-anchor':'end', 'font-size':'10', fill:dim});
+        t.textContent = gv;
+        svg.appendChild(t);
+      });
+
+      function pathFor(series, color, label){
+        const stepX = (w-padL-padR)/(series.length-1);
+        let d = '';
+        series.forEach(function(v,i){
+          const x = padL + i*stepX;
+          const y = h - padB - (v/maxV)*(h-padT-padB);
+          d += (i===0? 'M':'L') + x.toFixed(1) + ' ' + y.toFixed(1) + ' ';
+        });
+        const p = svgEl('path', {d:d, fill:'none', stroke:color, 'stroke-width':2.5});
+        svg.appendChild(p);
+        series.forEach(function(v,i){
+          const x = padL + i*stepX;
+          const y = h - padB - (v/maxV)*(h-padT-padB);
+          const c = svgEl('circle', {cx:x, cy:y, r:4.5, fill:color, class:'chart-point'});
+          c.addEventListener('mouseenter', function(e){
+            showTooltip(e, `<div class="tt-title">Year ${years[i]}</div><div class="tt-val">${label}: ${v}</div><div class="tt-sub">Indexed to 100 in 2014</div>`);
+          });
+          c.addEventListener('mousemove', positionTooltip);
+          c.addEventListener('mouseleave', hideTooltip);
+          c.addEventListener('click', function(e){
+            showTooltip(e, `<div class="tt-title">Year ${years[i]}</div><div class="tt-val">${label}: ${v}</div><div class="tt-sub">Indexed to 100 in 2014</div>`);
+          });
+          svg.appendChild(c);
+        });
+      }
+
+      pathFor(capacity, spark, 'PV Capacity');
+      pathFor(silver, copper, 'PV Silver Demand');
+
+      years.forEach(function(yr,i){
+        const stepX = (w-padL-padR)/(years.length-1);
+        const x = padL + i*stepX;
+        const t = svgEl('text', {x:x, y:h-padB+18, 'text-anchor':'middle', 'font-size':'10', fill:dim});
+        t.textContent = yr;
+        svg.appendChild(t);
+      });
+
+      const stepX = (w-padL-padR)/(years.length-1);
+      const lastX = padL + (years.length-1)*stepX;
+      const capY = h - padB - (capacity[capacity.length-1]/maxV)*(h-padT-padB);
+      const silY = h - padB - (silver[silver.length-1]/maxV)*(h-padT-padB);
+      const t1 = svgEl('text', {x:lastX-4, y:capY-10, 'text-anchor':'end', 'font-size':'11', fill:spark, 'font-weight':'600'});
+      t1.textContent = 'PV capacity ×10.8';
+      svg.appendChild(t1);
+      const t2 = svgEl('text', {x:lastX-4, y:silY+18, 'text-anchor':'end', 'font-size':'11', fill:copper, 'font-weight':'600'});
+      t2.textContent = 'PV silver demand ×3.3';
+      svg.appendChild(t2);
+
+      container.appendChild(svg);
+    }
+  } catch(e) { console.error('Error in Chart 2:', e); }
+
+  /* ---------- CHART 3: Supply vs demand deficit bars ---------- */
+  try {
+    const container = document.getElementById('chart-deficit');
+    if (container) {
+      container.innerHTML = '';
+      const data = [
+        {y:'2021', supply:1053, demand:1054},
+        {y:'2022', supply:1017, demand:1279},
+        {y:'2023', supply:1011, demand:1195},
+        {y:'2024', supply:1016, demand:1198},
+        {y:'2025', supply:1092, demand:1132},
+        {y:'2026*', supply:1066, demand:1113},
+      ];
+      const w = 900, h = 340, padL = 50, padR = 16, padT = 16, padB = 40;
+      const maxV = 1350;
+      const svg = svgEl('svg', {viewBox:`0 0 ${w} ${h}`, width:'100%', style:'display:block; overflow:visible;'});
+      const bw = (w - padL - padR) / data.length;
+
+      [0,300,600,900,1200].forEach(function(gv){
+        const y = h - padB - (gv/maxV)*(h-padT-padB);
+        svg.appendChild(svgEl('line', {x1:padL, x2:w-padR, y1:y, y2:y, stroke: lineSoft, 'stroke-width':1}));
+        const t = svgEl('text', {x:padL-10, y:y+4, 'text-anchor':'end', 'font-size':'11', fill:dim});
+        t.textContent = gv;
+        svg.appendChild(t);
+      });
+
+      data.forEach(function(d, i){
+        const groupX = padL + i*bw;
+        const barW = bw*0.30;
+        const gap = bw*0.06;
+        const x1 = groupX + bw*0.14;
+        const x2 = x1 + barW + gap;
+
+        const supplyH = (d.supply/maxV)*(h-padT-padB);
+        const demandH = (d.demand/maxV)*(h-padT-padB);
+        const ySupply = h - padB - supplyH;
+        const yDemand = h - padB - demandH;
+        const deficit = d.demand - d.supply;
+
+        const rSupply = svgEl('rect', {x:x1, y:ySupply, width:barW, height:supplyH, fill:'#b9bcc0', class:'chart-bar'});
+        rSupply.addEventListener('mouseenter', function(e){
+          showTooltip(e, `<div class="tt-title">Year ${d.y} Supply</div><div class="tt-val">${d.supply} Moz</div><div class="tt-sub">Demand: ${d.demand} Moz</div>`);
+        });
+        rSupply.addEventListener('mousemove', positionTooltip);
+        rSupply.addEventListener('mouseleave', hideTooltip);
+        rSupply.addEventListener('click', function(e){
+          showTooltip(e, `<div class="tt-title">Year ${d.y} Supply</div><div class="tt-val">${d.supply} Moz</div><div class="tt-sub">Demand: ${d.demand} Moz</div>`);
+        });
+        svg.appendChild(rSupply);
+
+        const rDemand = svgEl('rect', {x:x2, y:yDemand, width:barW, height:demandH, fill:copper, class:'chart-bar'});
+        rDemand.addEventListener('mouseenter', function(e){
+          showTooltip(e, `<div class="tt-title">Year ${d.y} Demand</div><div class="tt-val">${d.demand} Moz</div><div class="tt-sub">Deficit: -${Math.round(deficit)} Moz</div>`);
+        });
+        rDemand.addEventListener('mousemove', positionTooltip);
+        rDemand.addEventListener('mouseleave', hideTooltip);
+        rDemand.addEventListener('click', function(e){
+          showTooltip(e, `<div class="tt-title">Year ${d.y} Demand</div><div class="tt-val">${d.demand} Moz</div><div class="tt-sub">Deficit: -${Math.round(deficit)} Moz</div>`);
+        });
+        svg.appendChild(rDemand);
+
+        if(deficit > 0){
+          svg.appendChild(svgEl('line', {x1:x1+barW+gap/2, x2:x1+barW+gap/2, y1: yDemand, y2: ySupply, stroke: sparkDim, 'stroke-width':2, 'stroke-dasharray':'3,3'}));
+        }
+
+        const lbl = svgEl('text', {x:groupX+bw/2, y:h-padB+18, 'text-anchor':'middle', 'font-size':'11', fill:dim});
+        lbl.textContent = d.y;
+        svg.appendChild(lbl);
+
+        const defLbl = svgEl('text', {x:groupX+bw/2, y: Math.min(ySupply,yDemand)-8, 'text-anchor':'middle', 'font-size':'10.5', fill: sparkDim, 'font-weight':'600'});
+        defLbl.textContent = '−' + Math.round(deficit);
+        svg.appendChild(defLbl);
+      });
+
+      container.appendChild(svg);
+    }
+  } catch(e) { console.error('Error in Chart 3:', e); }
+
+  /* ---------- CHART 4: Composition toggle ---------- */
+  try {
+    const datasets = {
+      '2014': {
+        caption: 'Photovoltaics was a minor contributor to industrial demand',
+        items: [
+          {label:'Electronics & electrical', v:213, color:'#7c8085'},
+          {label:'Photovoltaics', v:60, color: copper},
+          {label:'Brazing alloys & solders', v:56, color:'#a9ac9f'},
+          {label:'Other industrial (EO, batteries, medical)', v:130, color:'#c9c5b8'},
+        ]
+      },
+      '2024': {
+        caption: 'PV became the single fastest-growing slice of the pie',
+        items: [
+          {label:'Electronics & electrical', v:254, color:'#7c8085'},
+          {label:'Photovoltaics', v:196, color: copper},
+          {label:'Other industrial (EO, batteries, medical)', v:173, color:'#c9c5b8'},
+          {label:'Brazing alloys & solders', v:57, color:'#a9ac9f'},
+        ]
+      },
+      '2026': {
+        caption: 'PV shrinks in absolute terms — but AI, EV and grid demand keep the pie from shrinking as much',
+        items: [
+          {label:'Electronics & electrical (incl. AI, EV, grid)', v:270, color:'#7c8085'},
+          {label:'Photovoltaics', v:151, color: copper},
+          {label:'Other industrial (EO, batteries, medical)', v:161, color:'#c9c5b8'},
+          {label:'Brazing alloys & solders', v:57, color:'#a9ac9f'},
+        ]
+      }
+    };
+
+    function render(view){
+      const container = document.getElementById('chart-composition');
+      const legendEl = document.getElementById('composition-legend');
+      const captionEl = document.getElementById('demand-caption');
+      if (!container || !legendEl || !captionEl) return;
+      container.innerHTML = '';
+      legendEl.innerHTML = '';
+      const d = datasets[view];
+      captionEl.textContent = d.caption;
+      const total = d.items.reduce(function(s,it){return s+it.v;}, 0);
+
+      const w = 900, h = 90, padL = 8, padR = 8;
+      const svg = svgEl('svg', {viewBox:`0 0 ${w} ${h}`, width:'100%', style:'display:block; overflow:visible;'});
+      let x = padL;
+      const barY = 20, barH = 40;
+      const usableW = w - padL - padR;
+
+      d.items.forEach(function(it){
+        const segW = (it.v/total) * usableW;
+        const pct = Math.round((it.v/total)*100);
+        const rect = svgEl('rect', {x:x, y:barY, width:Math.max(segW-2,0), height:barH, fill:it.color, rx:2, class:'comp-seg'});
+        rect.addEventListener('mouseenter', function(e){
+          showTooltip(e, `<div class="tt-title">${it.label}</div><div class="tt-val">${it.v} Moz (${pct}%)</div><div class="tt-sub">Total: ${Math.round(total)} Moz</div>`);
+        });
+        rect.addEventListener('mousemove', positionTooltip);
+        rect.addEventListener('mouseleave', hideTooltip);
+        rect.addEventListener('click', function(e){
+          showTooltip(e, `<div class="tt-title">${it.label}</div><div class="tt-val">${it.v} Moz (${pct}%)</div><div class="tt-sub">Total: ${Math.round(total)} Moz</div>`);
+        });
+        svg.appendChild(rect);
+
+        if(segW > 55){
+          const t = svgEl('text', {x: x+segW/2, y: barY+barH/2+5, 'text-anchor':'middle', 'font-size':'13', fill: (it.color===copper||it.color==='#7c8085') ? '#fff':'#333', 'font-weight':'600'});
+          t.textContent = pct + '%';
+          t.style.pointerEvents = 'none';
+          svg.appendChild(t);
+        }
+        x += segW;
+      });
+      container.appendChild(svg);
+
+      d.items.forEach(function(it){
+        const span = document.createElement('span');
+        span.style.cursor = 'pointer';
+        const dot = document.createElement('span');
+        dot.className = 'dot';
+        dot.style.background = it.color;
+        span.appendChild(dot);
+        span.appendChild(document.createTextNode(it.label + ' — ' + it.v + ' Moz'));
+        span.addEventListener('mouseenter', function(e){
+          const pct = Math.round((it.v/total)*100);
+          showTooltip(e, `<div class="tt-title">${it.label}</div><div class="tt-val">${it.v} Moz (${pct}%)</div>`);
+        });
+        span.addEventListener('mousemove', positionTooltip);
+        span.addEventListener('mouseleave', hideTooltip);
+        legendEl.appendChild(span);
+      });
+    }
+
+    render('2014');
+
+    document.querySelectorAll('#demand-toggle .toggle-btn').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        document.querySelectorAll('#demand-toggle .toggle-btn').forEach(function(b){b.classList.remove('active');});
+        btn.classList.add('active');
+        render(btn.getAttribute('data-view'));
+      });
+    });
+  } catch(e) { console.error('Error in Chart 4:', e); }
+
+  /* ---------- CHART 5: scenario projection lines to 2030 ---------- */
+  try {
+    const container = document.getElementById('chart-scenarios');
+    if (container) {
+      container.innerHTML = '';
+      const years = ['2026','2027','2028','2029','2030'];
+      const thrifting = [151, 158, 168, 178, 190];
+      const substitution = [151, 140, 122, 100, 82];
+
+      const w = 500, h = 280, padL = 40, padR = 20, padT = 20, padB = 32;
+      const maxV = 210;
+      const svg = svgEl('svg', {viewBox:`0 0 ${w} ${h}`, width:'100%', style:'display:block; overflow:visible;'});
+
+      [0,50,100,150,200].forEach(function(gv){
+        const y = h - padB - (gv/maxV)*(h-padT-padB);
+        svg.appendChild(svgEl('line', {x1:padL, x2:w-padR, y1:y, y2:y, stroke: lineSoft, 'stroke-width':1}));
+        const t = svgEl('text', {x:padL-8, y:y+4, 'text-anchor':'end', 'font-size':'10', fill:dim});
+        t.textContent = gv;
+        svg.appendChild(t);
+      });
+
+      function pathFor(series, color, label){
+        const stepX = (w-padL-padR)/(series.length-1);
+        let d = '';
+        series.forEach(function(v,i){
+          const x = padL + i*stepX;
+          const y = h - padB - (v/maxV)*(h-padT-padB);
+          d += (i===0? 'M':'L') + x.toFixed(1) + ' ' + y.toFixed(1) + ' ';
+        });
+        const p = svgEl('path', {d:d, fill:'none', stroke:color, 'stroke-width':2.5});
+        svg.appendChild(p);
+        series.forEach(function(v,i){
+          const x = padL + i*stepX;
+          const y = h - padB - (v/maxV)*(h-padT-padB);
+          const c = svgEl('circle', {cx:x, cy:y, r:4.5, fill:color, class:'chart-point'});
+          c.addEventListener('mouseenter', function(e){
+            showTooltip(e, `<div class="tt-title">${years[i]} — ${label}</div><div class="tt-val">${v} Moz</div><div class="tt-sub">Projected Demand</div>`);
+          });
+          c.addEventListener('mousemove', positionTooltip);
+          c.addEventListener('mouseleave', hideTooltip);
+          c.addEventListener('click', function(e){
+            showTooltip(e, `<div class="tt-title">${years[i]} — ${label}</div><div class="tt-val">${v} Moz</div><div class="tt-sub">Projected Demand</div>`);
+          });
+          svg.appendChild(c);
+        });
+      }
+
+      pathFor(thrifting, copper, 'Thrifting continues');
+      pathFor(substitution, spark, 'Substitution accelerates');
+
+      years.forEach(function(yr,i){
+        const stepX = (w-padL-padR)/(years.length-1);
+        const x = padL + i*stepX;
+        const t = svgEl('text', {x:x, y:h-padB+18, 'text-anchor':'middle', 'font-size':'10', fill:dim});
+        t.textContent = yr;
+        svg.appendChild(t);
+      });
+
+      const stepX = (w-padL-padR)/(years.length-1);
+      const lastX = padL + (years.length-1)*stepX;
+      const y1 = h - padB - (thrifting[thrifting.length-1]/maxV)*(h-padT-padB);
+      const y2 = h - padB - (substitution[substitution.length-1]/maxV)*(h-padT-padB);
+      const l1 = svgEl('text', {x:lastX-4, y:y1-8, 'text-anchor':'end', 'font-size':'10.5', fill:copper, 'font-weight':'600'});
+      l1.textContent = 'Thrifting continues';
+      svg.appendChild(l1);
+      const l2 = svgEl('text', {x:lastX-4, y:y2+16, 'text-anchor':'end', 'font-size':'10.5', fill:spark, 'font-weight':'600'});
+      l2.textContent = 'Substitution accelerates';
+      svg.appendChild(l2);
+
+      container.appendChild(svg);
+    }
+  } catch(e) { console.error('Error in Chart 5:', e); }
+
+  /* ---------- RATIO SLIDER ---------- */
+  try {
+    const slider = document.getElementById('ratio-slider');
+    const valueEl = document.getElementById('ratio-value');
+    const descEl = document.getElementById('ratio-desc');
+
+    function describe(v){
+      if(v >= 95) return 'Historic extreme — this is roughly where the ratio sat in April 2025, and near the March 2020 pandemic-crash low. Silver has rarely been this cheap relative to gold.';
+      if(v >= 80) return 'Silver looks historically cheap relative to gold by most 50-year benchmarks — a level that has often preceded silver outperformance.';
+      if(v >= 65) return 'Above the modern 20-year average (~70) but within a normal historical range.';
+      if(v >= 50) return 'Near the long-run 55-year average of about 60 — neither metal looks especially cheap relative to the other.';
+      if(v >= 40) return 'Below average — silver has already reclaimed meaningful ground on gold, similar to conditions in mid-2026.';
+      return 'Historically tight — territory last seen around 2012, when silver was comparatively expensive versus gold.';
+    }
+
+    function update(){
+      if (!slider || !valueEl || !descEl) return;
+      const v = parseInt(slider.value, 10);
+      valueEl.textContent = v + ' : 1';
+      descEl.textContent = describe(v);
+    }
+
+    if (slider) {
+      slider.addEventListener('input', update);
+      slider.addEventListener('change', update);
+      slider.addEventListener('pointermove', function(e){ if (e.buttons > 0) update(); });
+      update();
+    }
+  } catch(e) { console.error('Error in Slider:', e); }
 }
 
-/* ---------- CHART 1: PV demand bar chart ---------- */
-(function(){
-  const data = [
-    {y:'2014', v:60},
-    {y:'2016', v:76},
-    {y:'2018', v:101},
-    {y:'2020', v:105},
-    {y:'2022', v:118},
-    {y:'2023', v:194},
-    {y:'2024', v:232},
-    {y:'2025', v:187},
-    {y:'2026*', v:151},
-  ];
-  const w = 900, h = 320, padL = 46, padR = 16, padT = 14, padB = 36;
-  const maxV = 250;
-  const bw = (w - padL - padR) / data.length;
-  const svg = svgEl('svg', {viewBox:`0 0 ${w} ${h}`, width:'100%', style:'display:block; overflow:visible;'});
-
-  [0,50,100,150,200,250].forEach(function(gv){
-    const y = h - padB - (gv/maxV)*(h-padT-padB);
-    svg.appendChild(svgEl('line', {x1:padL, x2:w-padR, y1:y, y2:y, stroke: lineSoft, 'stroke-width':1}));
-    const t = svgEl('text', {x:padL-10, y:y+4, 'text-anchor':'end', 'font-size':'11', fill:dim});
-    t.textContent = gv;
-    svg.appendChild(t);
-  });
-
-  data.forEach(function(d, i){
-    const x = padL + i*bw + bw*0.22;
-    const barW = bw*0.56;
-    const barH = (d.v/maxV)*(h-padT-padB);
-    const y = h - padB - barH;
-    const isForecast = d.y.indexOf('*') > -1;
-    const rect = svgEl('rect', {x:x, y:y, width:barW, height:barH, fill: isForecast ? '#d99a5c' : copper, opacity: isForecast? 0.75 : 1});
-    svg.appendChild(rect);
-    const val = svgEl('text', {x:x+barW/2, y:y-8, 'text-anchor':'middle', 'font-size':'12', fill:'#3a3b3c', 'font-weight':'600'});
-    val.textContent = d.v;
-    svg.appendChild(val);
-    const lbl = svgEl('text', {x:x+barW/2, y:h-padB+18, 'text-anchor':'middle', 'font-size':'11', fill:dim});
-    lbl.textContent = d.y;
-    svg.appendChild(lbl);
-  });
-
-  document.getElementById('chart-pv-demand').appendChild(svg);
-})();
-
-/* ---------- CHART 2: Decoupling index (dual line) ---------- */
-(function(){
-  const years = ['2014','2016','2018','2020','2022','2024'];
-  const capacity = [100, 175, 270, 400, 620, 1080];
-  const silver = [100, 127, 168, 175, 197, 327];
-
-  const w = 500, h = 300, padL = 40, padR = 16, padT = 20, padB = 32;
-  const maxV = 1150;
-  const svg = svgEl('svg', {viewBox:`0 0 ${w} ${h}`, width:'100%', style:'display:block; overflow:visible;'});
-
-  [0,250,500,750,1000].forEach(function(gv){
-    const y = h - padB - (gv/maxV)*(h-padT-padB);
-    svg.appendChild(svgEl('line', {x1:padL, x2:w-padR, y1:y, y2:y, stroke: lineSoft, 'stroke-width':1}));
-    const t = svgEl('text', {x:padL-8, y:y+4, 'text-anchor':'end', 'font-size':'10', fill:dim});
-    t.textContent = gv;
-    svg.appendChild(t);
-  });
-
-  function pathFor(series, color){
-    const stepX = (w-padL-padR)/(series.length-1);
-    let d = '';
-    series.forEach(function(v,i){
-      const x = padL + i*stepX;
-      const y = h - padB - (v/maxV)*(h-padT-padB);
-      d += (i===0? 'M':'L') + x.toFixed(1) + ' ' + y.toFixed(1) + ' ';
-    });
-    const p = svgEl('path', {d:d, fill:'none', stroke:color, 'stroke-width':2.5});
-    svg.appendChild(p);
-    series.forEach(function(v,i){
-      const x = padL + i*stepX;
-      const y = h - padB - (v/maxV)*(h-padT-padB);
-      svg.appendChild(svgEl('circle', {cx:x, cy:y, r:3.2, fill:color}));
-    });
-  }
-
-  pathFor(capacity, spark);
-  pathFor(silver, copper);
-
-  years.forEach(function(yr,i){
-    const stepX = (w-padL-padR)/(years.length-1);
-    const x = padL + i*stepX;
-    const t = svgEl('text', {x:x, y:h-padB+18, 'text-anchor':'middle', 'font-size':'10', fill:dim});
-    t.textContent = yr;
-    svg.appendChild(t);
-  });
-
-  const stepX = (w-padL-padR)/(years.length-1);
-  const lastX = padL + (years.length-1)*stepX;
-  const capY = h - padB - (capacity[capacity.length-1]/maxV)*(h-padT-padB);
-  const silY = h - padB - (silver[silver.length-1]/maxV)*(h-padT-padB);
-  const t1 = svgEl('text', {x:lastX-4, y:capY-10, 'text-anchor':'end', 'font-size':'11', fill:spark, 'font-weight':'600'});
-  t1.textContent = 'PV capacity ×10.8';
-  svg.appendChild(t1);
-  const t2 = svgEl('text', {x:lastX-4, y:silY+18, 'text-anchor':'end', 'font-size':'11', fill:copper, 'font-weight':'600'});
-  t2.textContent = 'PV silver demand ×3.3';
-  svg.appendChild(t2);
-
-  document.getElementById('chart-decouple').appendChild(svg);
-})();
-
-/* ---------- CHART 3: Supply vs demand deficit bars ---------- */
-(function(){
-  const data = [
-    {y:'2021', supply:1053, demand:1054},
-    {y:'2022', supply:1017, demand:1279},
-    {y:'2023', supply:1011, demand:1195},
-    {y:'2024', supply:1016, demand:1198},
-    {y:'2025', supply:1092, demand:1132},
-    {y:'2026*', supply:1066, demand:1113},
-  ];
-  const w = 900, h = 340, padL = 50, padR = 16, padT = 16, padB = 40;
-  const maxV = 1350;
-  const svg = svgEl('svg', {viewBox:`0 0 ${w} ${h}`, width:'100%', style:'display:block; overflow:visible;'});
-  const bw = (w - padL - padR) / data.length;
-
-  [0,300,600,900,1200].forEach(function(gv){
-    const y = h - padB - (gv/maxV)*(h-padT-padB);
-    svg.appendChild(svgEl('line', {x1:padL, x2:w-padR, y1:y, y2:y, stroke: lineSoft, 'stroke-width':1}));
-    const t = svgEl('text', {x:padL-10, y:y+4, 'text-anchor':'end', 'font-size':'11', fill:dim});
-    t.textContent = gv;
-    svg.appendChild(t);
-  });
-
-  data.forEach(function(d, i){
-    const groupX = padL + i*bw;
-    const barW = bw*0.30;
-    const gap = bw*0.06;
-    const x1 = groupX + bw*0.14;
-    const x2 = x1 + barW + gap;
-
-    const supplyH = (d.supply/maxV)*(h-padT-padB);
-    const demandH = (d.demand/maxV)*(h-padT-padB);
-    const ySupply = h - padB - supplyH;
-    const yDemand = h - padB - demandH;
-
-    svg.appendChild(svgEl('rect', {x:x1, y:ySupply, width:barW, height:supplyH, fill:'#b9bcc0'}));
-    svg.appendChild(svgEl('rect', {x:x2, y:yDemand, width:barW, height:demandH, fill:copper}));
-
-    const deficit = d.demand - d.supply;
-    if(deficit > 0){
-      svg.appendChild(svgEl('line', {x1:x1+barW+gap/2, x2:x1+barW+gap/2, y1: yDemand, y2: ySupply, stroke: sparkDim, 'stroke-width':2, 'stroke-dasharray':'3,3'}));
-    }
-
-    const lbl = svgEl('text', {x:groupX+bw/2, y:h-padB+18, 'text-anchor':'middle', 'font-size':'11', fill:dim});
-    lbl.textContent = d.y;
-    svg.appendChild(lbl);
-
-    const defLbl = svgEl('text', {x:groupX+bw/2, y: Math.min(ySupply,yDemand)-8, 'text-anchor':'middle', 'font-size':'10.5', fill: sparkDim, 'font-weight':'600'});
-    defLbl.textContent = '−' + Math.round(deficit);
-    svg.appendChild(defLbl);
-  });
-
-  document.getElementById('chart-deficit').appendChild(svg);
-})();
-
-/* ---------- CHART 4: Composition toggle ---------- */
-(function(){
-  const datasets = {
-    '2014': {
-      caption: 'Photovoltaics was a minor contributor to industrial demand',
-      items: [
-        {label:'Electronics & electrical', v:213, color:'#7c8085'},
-        {label:'Photovoltaics', v:60, color: copper},
-        {label:'Brazing alloys & solders', v:56, color:'#a9ac9f'},
-        {label:'Other industrial (EO, batteries, medical)', v:130, color:'#c9c5b8'},
-      ]
-    },
-    '2024': {
-      caption: 'PV became the single fastest-growing slice of the pie',
-      items: [
-        {label:'Electronics & electrical', v:254, color:'#7c8085'},
-        {label:'Photovoltaics', v:196, color: copper},
-        {label:'Other industrial (EO, batteries, medical)', v:173, color:'#c9c5b8'},
-        {label:'Brazing alloys & solders', v:57, color:'#a9ac9f'},
-      ]
-    },
-    '2026': {
-      caption: 'PV shrinks in absolute terms — but AI, EV and grid demand keep the pie from shrinking as much',
-      items: [
-        {label:'Electronics & electrical (incl. AI, EV, grid)', v:270, color:'#7c8085'},
-        {label:'Photovoltaics', v:151, color: copper},
-        {label:'Other industrial (EO, batteries, medical)', v:161, color:'#c9c5b8'},
-        {label:'Brazing alloys & solders', v:57, color:'#a9ac9f'},
-      ]
-    }
-  };
-
-  function render(view){
-    const container = document.getElementById('chart-composition');
-    const legendEl = document.getElementById('composition-legend');
-    const captionEl = document.getElementById('demand-caption');
-    container.innerHTML = '';
-    legendEl.innerHTML = '';
-    const d = datasets[view];
-    captionEl.textContent = d.caption;
-    const total = d.items.reduce(function(s,it){return s+it.v;}, 0);
-
-    const w = 900, h = 90, padL = 8, padR = 8;
-    const svg = svgEl('svg', {viewBox:`0 0 ${w} ${h}`, width:'100%', style:'display:block; overflow:visible;'});
-    let x = padL;
-    const barY = 20, barH = 40;
-    const usableW = w - padL - padR;
-
-    d.items.forEach(function(it){
-      const segW = (it.v/total) * usableW;
-      svg.appendChild(svgEl('rect', {x:x, y:barY, width:Math.max(segW-2,0), height:barH, fill:it.color, rx:1}));
-      if(segW > 55){
-        const pct = Math.round((it.v/total)*100);
-        const t = svgEl('text', {x: x+segW/2, y: barY+barH/2+5, 'text-anchor':'middle', 'font-size':'13', fill: (it.color===copper||it.color==='#7c8085') ? '#fff':'#333', 'font-weight':'600'});
-        t.textContent = pct + '%';
-        svg.appendChild(t);
-      }
-      x += segW;
-    });
-    container.appendChild(svg);
-
-    d.items.forEach(function(it){
-      const span = document.createElement('span');
-      const dot = document.createElement('span');
-      dot.className = 'dot';
-      dot.style.background = it.color;
-      span.appendChild(dot);
-      span.appendChild(document.createTextNode(it.label + ' — ' + it.v + ' Moz'));
-      legendEl.appendChild(span);
-    });
-  }
-
-  render('2014');
-
-  document.querySelectorAll('#demand-toggle .toggle-btn').forEach(function(btn){
-    btn.addEventListener('click', function(){
-      document.querySelectorAll('#demand-toggle .toggle-btn').forEach(function(b){b.classList.remove('active');});
-      btn.classList.add('active');
-      render(btn.getAttribute('data-view'));
-    });
-  });
-})();
-
-/* ---------- CHART 5: scenario projection lines to 2030 ---------- */
-(function(){
-  const years = ['2026','2027','2028','2029','2030'];
-  const thrifting = [151, 158, 168, 178, 190];
-  const substitution = [151, 140, 122, 100, 82];
-
-  const w = 500, h = 280, padL = 40, padR = 20, padT = 20, padB = 32;
-  const maxV = 210;
-  const svg = svgEl('svg', {viewBox:`0 0 ${w} ${h}`, width:'100%', style:'display:block; overflow:visible;'});
-
-  [0,50,100,150,200].forEach(function(gv){
-    const y = h - padB - (gv/maxV)*(h-padT-padB);
-    svg.appendChild(svgEl('line', {x1:padL, x2:w-padR, y1:y, y2:y, stroke: lineSoft, 'stroke-width':1}));
-    const t = svgEl('text', {x:padL-8, y:y+4, 'text-anchor':'end', 'font-size':'10', fill:dim});
-    t.textContent = gv;
-    svg.appendChild(t);
-  });
-
-  function pathFor(series, color){
-    const stepX = (w-padL-padR)/(series.length-1);
-    let d = '';
-    series.forEach(function(v,i){
-      const x = padL + i*stepX;
-      const y = h - padB - (v/maxV)*(h-padT-padB);
-      d += (i===0? 'M':'L') + x.toFixed(1) + ' ' + y.toFixed(1) + ' ';
-    });
-    const p = svgEl('path', {d:d, fill:'none', stroke:color, 'stroke-width':2.5});
-    svg.appendChild(p);
-    series.forEach(function(v,i){
-      const x = padL + i*stepX;
-      const y = h - padB - (v/maxV)*(h-padT-padB);
-      svg.appendChild(svgEl('circle', {cx:x, cy:y, r:3.2, fill:color}));
-    });
-  }
-
-  pathFor(thrifting, copper);
-  pathFor(substitution, spark);
-
-  years.forEach(function(yr,i){
-    const stepX = (w-padL-padR)/(years.length-1);
-    const x = padL + i*stepX;
-    const t = svgEl('text', {x:x, y:h-padB+18, 'text-anchor':'middle', 'font-size':'10', fill:dim});
-    t.textContent = yr;
-    svg.appendChild(t);
-  });
-
-  const stepX = (w-padL-padR)/(years.length-1);
-  const lastX = padL + (years.length-1)*stepX;
-  const y1 = h - padB - (thrifting[thrifting.length-1]/maxV)*(h-padT-padB);
-  const y2 = h - padB - (substitution[substitution.length-1]/maxV)*(h-padT-padB);
-  const l1 = svgEl('text', {x:lastX-4, y:y1-8, 'text-anchor':'end', 'font-size':'10.5', fill:copper, 'font-weight':'600'});
-  l1.textContent = 'Thrifting continues';
-  svg.appendChild(l1);
-  const l2 = svgEl('text', {x:lastX-4, y:y2+16, 'text-anchor':'end', 'font-size':'10.5', fill:spark, 'font-weight':'600'});
-  l2.textContent = 'Substitution accelerates';
-  svg.appendChild(l2);
-
-  document.getElementById('chart-scenarios').appendChild(svg);
-})();
-
-/* ---------- RATIO SLIDER ---------- */
-(function(){
-  const slider = document.getElementById('ratio-slider');
-  const valueEl = document.getElementById('ratio-value');
-  const descEl = document.getElementById('ratio-desc');
-
-  function describe(v){
-    if(v >= 95) return 'Historic extreme — this is roughly where the ratio sat in April 2025, and near the March 2020 pandemic-crash low. Silver has rarely been this cheap relative to gold.';
-    if(v >= 80) return 'Silver looks historically cheap relative to gold by most 50-year benchmarks — a level that has often preceded silver outperformance.';
-    if(v >= 65) return 'Above the modern 20-year average (~70) but within a normal historical range.';
-    if(v >= 50) return 'Near the long-run 55-year average of about 60 — neither metal looks especially cheap relative to the other.';
-    if(v >= 40) return 'Below average — silver has already reclaimed meaningful ground on gold, similar to conditions in mid-2026.';
-    return 'Historically tight — territory last seen around 2012, when silver was comparatively expensive versus gold.';
-  }
-
-  function update(){
-    const v = parseInt(slider.value, 10);
-    valueEl.textContent = v + ' : 1';
-    descEl.textContent = describe(v);
-  }
-  slider.addEventListener('input', update);
-  update();
-})();
-
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initAll);
+} else {
+  initAll();
+}
 })();
 </script>
 
