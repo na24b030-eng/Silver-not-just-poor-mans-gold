@@ -1007,6 +1007,7 @@ function svgEl(tag, attrs){
   const w = 900, h = 320, padL = 46, padR = 16, padT = 14, padB = 36;
   const maxV = 250;
   const bw = (w - padL - padR) / data.length;
+  const svg = svgEl('svg', {viewBox:`0 0 ${w} ${h}`, width:'100%', style:'display:block; overflow:visible;'});
 
   [0,50,100,150,200,250].forEach(function(gv){
     const y = h - padB - (gv/maxV)*(h-padT-padB);
