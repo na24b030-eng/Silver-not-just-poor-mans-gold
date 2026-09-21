@@ -215,13 +215,16 @@ p:last-child{margin-bottom:0;}
   margin-bottom:18px;
 }
 
+.nowrap{ white-space:nowrap; }
+
 h2.title{
   font-family:var(--serif);
   font-weight:500;
   font-size:clamp(1.8rem, 3.4vw, 2.6rem);
   line-height:1.15;
   margin:0 0 28px 0;
-  max-width:18ch;
+  max-width:32ch;
+  text-wrap:balance;
 }
 
 h3.sub{
@@ -793,7 +796,7 @@ hr.rule{
 <section class="section">
   <div class="wrap">
     <div class="section-label">02 — THE TAKEOVER, IN ONE CHART</div>
-    <h2 class="title">Solar's share of silver's industrial demand, 2014 → 2026</h2>
+    <h2 class="title">Solar's share of silver's industrial demand, <span class="nowrap">2014&nbsp;→&nbsp;2026</span></h2>
     <div class="measure" style="max-width:720px;">
       <p class="lede">In 2014, photovoltaics accounted for roughly 11% of the silver used in industry — a modest, second-tier application behind electronics, brazing alloys, and ethylene oxide catalysis.<span class="src">4</span> By 2024, that share had nearly tripled to 29%.<span class="src">1</span> Look at the raw ounces and the story gets starker still.</p>
     </div>
@@ -853,7 +856,7 @@ hr.rule{
     <div class="stat-grid">
       <div class="stat-cell">
         <div class="num">−19%</div>
-        <div class="lbl">Fall in PV silver demand, 2025 → 2026, the sector's sharpest cut ever recorded</div>
+        <div class="lbl">Fall in PV silver demand, <span class="nowrap">2025&nbsp;→&nbsp;2026</span>, the sector's sharpest cut ever recorded</div>
       </div>
       <div class="stat-cell">
         <div class="num">6th</div>
